@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f172a" />
+    <title>Paris Walks — Suivi de balades</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div id="loading-screen">
+      <span class="loading-mark">◐</span>
+      <h2>Paris Walks</h2>
+      <p id="loading-message">Chargement des rues de Paris…</p>
+      <div class="loading-bar">
+        <div class="loading-fill"></div>
+      </div>
+      <p class="loading-hint">Première visite : ~15 secondes<br>Visites suivantes : instantané ⚡</p>
+    </div>
+    <header class="app-header main-only">
+      <div class="brand">
+        <span class="brand-mark">◐</span>
+        <h1>Paris Walks</h1>
+      </div>
+      <p class="tagline" id="motivation">Prêt·e pour une nouvelle balade ?</p>
+
+      <section class="progress-banner" aria-live="polite">
+        <div class="progress-bar">
+          <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+        </div>
+        <div class="progress-text">
+          <span id="progress-pct">0,0 % des rues de Paris parcourues</span>
+          <span id="progress-detail" class="progress-detail">Chargement de la carte…</span>
+        </div>
+      </section>
+    </header>
+
+    <header class="detail-header detail-only" hidden>
+      <button id="back-btn" class="back-btn" type="button" aria-label="Retour">
+        <span aria-hidden="true">←</span>
+      </button>
+      <div class="detail-titles">
+        <h2 id="detail-title">Balade</h2>
+        <p id="detail-subtitle" class="detail-subtitle"></p>
+      </div>
+    </header>
+
+    <main class="app-main">
+      <div id="map" aria-label="Carte de Paris"></div>
+
+      <section class="stats main-only" aria-label="Statistiques de la balade en cours">
+        <div class="stat">
+          <span class="stat-label">Distance</span>
+          <span class="stat-value" id="stat-distance">0,00 <small>km</small></span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Durée</span>
+          <span class="stat-value" id="stat-duration">00:00</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Allure</span>
+          <span class="stat-value" id="stat-pace">— <small>km/h</small></span>
+        </div>
+      </section>
+
+      <section class="stats detail-only" aria-label="Détails de la balade" hidden>
+        <div class="stat">
+          <span class="stat-label">Distance</span>
+          <span class="stat-value" id="detail-distance">— <small>km</small></span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Durée</span>
+          <span class="stat-value" id="detail-duration">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Calories</span>
+          <span class="stat-value" id="detail-calories">— <small>kcal</small></span>
+        </div>
+      </section>
+
+      <div class="controls main-only">
+        <button id="toggle-btn" class="btn-primary" type="button">
+          <span class="btn-icon" aria-hidden="true"></span>
+          <span class="btn-label">Démarrer la balade</span>
+        </button>
+        <p id="status" class="status">Appuyez pour commencer le suivi GPS.</p>
+      </div>
+
+      <section class="history main-only" aria-label="Balades précédentes">
+        <header class="history-header">
+          <h2>Historique</h2>
+          <span id="history-count" class="history-count">0 balade</span>
+        </header>
+        <ul id="history-list" class="history-list">
+          <li class="history-empty">Aucune balade enregistrée pour l'instant.</li>
+        </ul>
+      </section>
+    </main>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
