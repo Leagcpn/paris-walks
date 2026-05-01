@@ -39,6 +39,20 @@
         </div>
       </section>
     </header>
+    <div class="global-stats main-only">
+      <div class="global-stat">
+        <span class="global-stat-value" id="stat-total-km">0,00</span>
+        <span class="global-stat-label">km parcourus</span>
+      </div>
+      <div class="global-stat">
+        <span class="global-stat-value" id="stat-total-time">00:00</span>
+        <span class="global-stat-label">temps total</span>
+      </div>
+      <div class="global-stat">
+        <span class="global-stat-value" id="stat-total-walks">0</span>
+        <span class="global-stat-label">balades</span>
+      </div>
+    </div>
 
     <header class="detail-header detail-only" hidden>
       <button id="back-btn" class="back-btn" type="button" aria-label="Retour">
@@ -52,21 +66,6 @@
 
     <main class="app-main">
       <div id="map" aria-label="Carte de Paris"></div>
-
-      <section class="stats main-only" aria-label="Statistiques de la balade en cours">
-        <div class="stat">
-          <span class="stat-label">Distance</span>
-          <span class="stat-value" id="stat-distance">0,00 <small>km</small></span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Durée</span>
-          <span class="stat-value" id="stat-duration">00:00</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Allure</span>
-          <span class="stat-value" id="stat-pace">— <small>km/h</small></span>
-        </div>
-      </section>
 
       <section class="stats detail-only" aria-label="Détails de la balade" hidden>
         <div class="stat">
@@ -82,13 +81,30 @@
           <span class="stat-value" id="detail-calories">— <small>kcal</small></span>
         </div>
       </section>
+      <button id="delete-walk-btn" class="btn-delete detail-only" type="button" hidden>
+       Supprimer cette balade
+      </button>
+      <section class="stats main-only" id="live-stats" aria-label="Statistiques de la balade en cours" hidden>
+        <div class="stat">
+          <span class="stat-label">Distance</span>
+          <span class="stat-value" id="stat-distance">0,00 <small>km</small></span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Durée</span>
+          <span class="stat-value" id="stat-duration">00:00</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Allure</span>
+          <span class="stat-value" id="stat-pace">— <small>km/h</small></span>
+        </div>
+      </section>
 
       <div class="controls main-only">
         <button id="toggle-btn" class="btn-primary" type="button">
           <span class="btn-icon" aria-hidden="true"></span>
           <span class="btn-label">Démarrer la balade</span>
         </button>
-        <p id="status" class="status">Appuyez pour commencer le suivi GPS.</p>
+
       </div>
 
       <section class="history main-only" aria-label="Balades précédentes">
@@ -106,4 +122,15 @@
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script type="module" src="./app.js"></script>
   </body>
+  <div id="confirm-modal" hidden>
+    <div class="modal-overlay"></div>
+    <div class="modal-box">
+      <p class="modal-text">Supprimer cette balade définitivement ?</p>
+      <div class="modal-actions">
+        <button id="modal-cancel" class="modal-btn modal-btn-cancel">Annuler</button>
+        <button id="modal-confirm" class="modal-btn modal-btn-delete">Supprimer</button>
+      </div>
+    </div>
+  </div>
+
 </html>

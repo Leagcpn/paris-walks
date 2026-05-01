@@ -26,17 +26,13 @@ const GRID_LAT = 0.0005;
 const GRID_LNG = 0.00074;
 
 const motivations = [
-  "Prêt·e pour une nouvelle balade ?",
-  "Chaque pas compte. À vous de jouer !",
-  "Paris vous attend. En route !",
   "Une rue à découvrir aujourd'hui ?",
-  "Belle journée pour marcher ✨",
 ];
 
 // --- DOM refs ---
 const toggleBtn = document.getElementById("toggle-btn");
 const btnLabel = toggleBtn.querySelector(".btn-label");
-const statusEl = document.getElementById("status");
+const statusEl = document.getElementById("status") || document.createElement("p");
 const distanceEl = document.getElementById("stat-distance");
 const durationEl = document.getElementById("stat-duration");
 const paceEl = document.getElementById("stat-pace");
@@ -241,20 +237,21 @@ function renderHistory() {
           <span class="history-item-distance">${formatDistance(w.distance)}<small> km</small></span>
         </div>
         <div class="history-item-bottom">
-          <span class="history-item-stat">
-            <span class="history-stat-icon" aria-hidden="true">⏱</span>
-            ${formatDuration(w.duration)}
-          </span>
-          <span class="history-item-stat">
-            <span class="history-stat-icon" aria-hidden="true">⚡</span>
-            ${pace}<small> km/h</small>
-          </span>
-          <span class="history-item-stat">
-            <span class="history-stat-icon" aria-hidden="true">🔥</span>
-            ${kcal}<small> kcal</small>
-          </span>
-          <span class="history-item-chevron" aria-hidden="true">›</span>
-        </div>
+            <span class="history-item-stat">
+              <span class="history-stat-icon" aria-hidden="true">📏</span>
+              ${formatDistance(w.distance)}<small> km</small>
+            </span>
+            <span class="history-item-stat">
+              <span class="history-stat-icon" aria-hidden="true">⏱</span>
+              ${formatDuration(w.duration)}
+            </span>
+            <span class="history-item-stat">
+              <span class="history-stat-icon" aria-hidden="true">🔥</span>
+              ${kcal}<small> kcal</small>
+            </span>
+            <span class="history-item-chevron" aria-hidden="true">›</span>
+          </div>
+
       </button>
     </li>`;
   }).join("");
@@ -478,6 +475,26 @@ function showWalkDetail(walk) {
   detailDurationEl.textContent = formatDuration(walk.duration);
   const kcal = estimateCalories(walk.distance, walk.duration);
   detailCaloriesEl.innerHTML = `${kcal} <small>kcal</small>`;
+  const deleteBtn = document.getElementById("delete-walk-btn");
+  deleteBtn.hidden = false;
+  deleteBtn.onclick = () => {
+    const modal = document.getElementById("confirm-modal");
+    modal.hidden = false;
+
+    document.getElementById("modal-cancel").onclick = () => {
+      modal.hidden = true;
+    };
+
+    document.getElementById("modal-confirm").onclick = () => {
+      modal.hidden = true;
+      const walks = loadHistory().filter(w => String(w.id) !== String(walk.id));
+      saveHistory(walks);
+      showMainView();
+      renderHistory();
+      updateProgress();
+      updateGlobalStats();
+    };
+  };
 
   // Recalcule le layout après changement d'affichage
   setTimeout(() => map.invalidateSize(), 50);
@@ -485,6 +502,7 @@ function showWalkDetail(walk) {
 
 function showMainView() {
   inDetailView = false;
+  document.getElementById("delete-walk-btn").hidden = true;
   detailOnlyEls.forEach((el) => (el.hidden = true));
   mainOnlyEls.forEach((el) => (el.hidden = false));
   if (detailTrack) { map.removeLayer(detailTrack); detailTrack = null; }
@@ -565,9 +583,12 @@ function paintStreetDone(idx) {
 // --- Progression globale ---
 // (km parcourus dans toute l'historique + balade en cours) / 1800 km × 100
 function totalKmWalked() {
-  const histM = loadHistory().reduce((sum, w) => sum + (w.distance || 0), 0);
-  const liveM = tracking ? totalDistance : 0;
-  return (histM + liveM) / 1000;
+  const doneKm = [...doneStreetIds].reduce((sum, id) => {
+    const street = streets.find(s => s.id === id);
+    return sum + (street ? street.length / 1000 : 0);
+  }, 0);
+  const liveKm = tracking ? totalDistance / 1000 : 0;
+  return doneKm + liveKm;
 }
 
 function updateProgress() {
@@ -577,7 +598,15 @@ function updateProgress() {
   progressDetailEl.textContent = `${km.toFixed(2).replace(".", ",")} / ${TOTAL_PARIS_KM} km`;
   progressFillEl.style.width = `${Math.min(100, pct)}%`;
 }
+function updateGlobalStats() {
+  const walks = loadHistory();
+  const totalKm = walks.reduce((sum, w) => sum + (w.distance || 0), 0) / 1000;
+  const totalMs = walks.reduce((sum, w) => sum + (w.duration || 0), 0);
 
+  document.getElementById("stat-total-km").textContent = totalKm.toFixed(2).replace(".", ",");
+  document.getElementById("stat-total-time").textContent = formatDuration(totalMs);
+  document.getElementById("stat-total-walks").textContent = walks.length;
+}
 // --- Calcul rapide : plus proche échantillon d'une rue ---
 function nearestSampleDist(point, samples) {
   let best = Infinity;
@@ -712,62 +741,6 @@ function recoverInterruptedWalk() {
   clearCurrentWalk();
 }
 
-// --- Snap-to-road via OSRM (router.project-osrm.org) ---
-// On utilise DEUX endpoints OSRM :
-//   1) /nearest/ : projette chaque point GPS sur la rue la plus proche.
-//   2) /route/   : calcule l'itinéraire piéton entre deux points GPS consécutifs.
-//      C'est cet endpoint qui fait que le tracé suit *réellement* les rues
-//      (l'endpoint /nearest/ ne donne que la projection ponctuelle ; la ligne
-//      entre deux projections coupe encore en diagonale entre les rues).
-const OSRM_NEAREST_URL = "https://router.project-osrm.org/nearest/v1/foot";
-const OSRM_ROUTE_URL   = "https://router.project-osrm.org/route/v1/foot";
-const SNAP_MAX_DISTANCE_M = 50;
-const SNAP_MIN_MOVE_M     = 3;
-const SNAP_REQUEST_TIMEOUT_MS = 5000;
-
-async function snapToRoad(lat, lng) {
-  const url = `${OSRM_NEAREST_URL}/${lng},${lat}?number=1`;
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), SNAP_REQUEST_TIMEOUT_MS);
-  try {
-    const resp = await fetch(url, { signal: ctrl.signal });
-    if (!resp.ok) return null;
-    const data = await resp.json();
-    const wp = data.waypoints?.[0];
-    if (!wp || !Array.isArray(wp.location)) return null;
-    const [snapLng, snapLat] = wp.location;
-    const dist = haversine({ lat, lng }, { lat: snapLat, lng: snapLng });
-    if (dist > SNAP_MAX_DISTANCE_M) return null;
-    return { lat: snapLat, lng: snapLng, dist };
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(t);
-  }
-}
-
-async function routeBetween(a, b) {
-  const url = `${OSRM_ROUTE_URL}/${a.lng},${a.lat};${b.lng},${b.lat}?geometries=geojson&overview=full`;
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), SNAP_REQUEST_TIMEOUT_MS);
-  try {
-    const resp = await fetch(url, { signal: ctrl.signal });
-    if (!resp.ok) return null;
-    const data = await resp.json();
-    const route = data.routes?.[0];
-    if (!route || !route.geometry || !Array.isArray(route.geometry.coordinates)) return null;
-    const coords = route.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
-    return { coords, distance: route.distance };
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(t);
-  }
-}
-
-let snapChain = Promise.resolve();
-let lastSnappedGps = null;
-
 function onPosition(pos) {
   const { latitude, longitude, accuracy } = pos.coords;
 
@@ -777,85 +750,43 @@ function onPosition(pos) {
     setStatus("Suivi actif — bonne balade !", "active");
   }
 
-  // Marqueur live = position GPS réelle (immédiat, sans attendre OSRM).
+  const point = { lat: latitude, lng: longitude, t: pos.timestamp };
+
+  if (points.length > 0) {
+    const last = points[points.length - 1];
+    const d = haversine(last, point);
+    if (d < 2) return;
+    totalDistance += d;
+  } else {
+    map.setView([latitude, longitude], 16);
+  }
+
+  points.push(point);
+
+  const latlngs = points.map((p) => [p.lat, p.lng]);
+  if (!trackPolyline) {
+    trackPolyline = L.polyline(latlngs, {
+      color: "#e85a4f",
+      weight: 5,
+      opacity: 0.9,
+      lineCap: "round",
+      lineJoin: "round",
+    }).addTo(map);
+  } else {
+    trackPolyline.setLatLngs(latlngs);
+  }
+
   if (!liveMarker) {
     liveMarker = L.marker([latitude, longitude], { icon: liveIcon }).addTo(map);
   } else {
     liveMarker.setLatLng([latitude, longitude]);
   }
+
   map.panTo([latitude, longitude], { animate: true, duration: 0.4 });
-
-  snapChain = snapChain
-    .then(async () => {
-      const t0 = performance.now();
-      const snapped = await snapToRoad(latitude, longitude);
-      const target = snapped
-        ? { lat: snapped.lat, lng: snapped.lng }
-        : { lat: latitude, lng: longitude };
-
-      if (snapped) {
-        console.log(
-          `[snap] GPS (${latitude.toFixed(5)}, ${longitude.toFixed(5)}) ` +
-          `→ rue (${snapped.lat.toFixed(5)}, ${snapped.lng.toFixed(5)}) ` +
-          `Δ=${snapped.dist.toFixed(1)} m en ${(performance.now() - t0).toFixed(0)} ms`
-        );
-      } else {
-        console.warn(
-          `[snap] échec pour (${latitude.toFixed(5)}, ${longitude.toFixed(5)}) — point GPS brut conservé`
-        );
-      }
-
-      if (!lastSnappedGps) {
-        // 1er point : on initialise le tracé sur la projection.
-        points = [{ lat: target.lat, lng: target.lng }];
-        lastSnappedGps = target;
-        map.setView([target.lat, target.lng], 16);
-      } else {
-        const moveDist = haversine(lastSnappedGps, target);
-        if (moveDist < SNAP_MIN_MOVE_M) return; // sur place
-
-        // /route/ entre les deux points : c'est ÇA qui fait que le tracé
-        // épouse les rues, pas un segment droit.
-        const t1 = performance.now();
-        const route = await routeBetween(lastSnappedGps, target);
-        if (route && route.coords.length >= 2) {
-          for (let i = 1; i < route.coords.length; i++) {
-            const [lat, lng] = route.coords[i];
-            points.push({ lat, lng });
-          }
-          totalDistance += route.distance;
-          console.log(
-            `[route] ${lastSnappedGps.lat.toFixed(5)},${lastSnappedGps.lng.toFixed(5)} → ` +
-            `${target.lat.toFixed(5)},${target.lng.toFixed(5)} : ` +
-            `${route.coords.length} pts, +${route.distance.toFixed(0)} m ` +
-            `en ${(performance.now() - t1).toFixed(0)} ms`
-          );
-        } else {
-          // Fallback : segment droit
-          points.push({ lat: target.lat, lng: target.lng });
-          totalDistance += moveDist;
-          console.warn(`[route] échec → segment droit, +${moveDist.toFixed(0)} m`);
-        }
-        lastSnappedGps = target;
-      }
-
-      const latlngs = points.map((p) => [p.lat, p.lng]);
-      if (!trackPolyline) {
-        trackPolyline = L.polyline(latlngs, {
-          color: "#e85a4f", weight: 5, opacity: 0.9,
-          lineCap: "round", lineJoin: "round",
-        }).addTo(map);
-      } else {
-        trackPolyline.setLatLngs(latlngs);
-      }
-
-      updateStats();
-      // Couverture des rues : on n'utilise que les points GPS snappés
-      // (les vertices intermédiaires du routage ne représentent pas où on est passé).
-      updateStreetCoverage(target);
-    })
-    .catch((err) => console.warn("[snap] erreur dans la chaîne :", err));
+  updateStreetCoverage(point);
+  updateStats();
 }
+
 
 function onPositionError(err) {
   let msg = "Impossible d'obtenir votre position.";
@@ -875,11 +806,9 @@ function startTracking() {
   if (liveMarker) { map.removeLayer(liveMarker); liveMarker = null; }
   activeStreets.clear();
   for (const s of streets) s.covered.clear();
-  snapChain = Promise.resolve(); // Repart sur une chaîne propre
-  lastSnappedGps = null;          // Aucune origine de routage encore
-
   startTime = Date.now();
   tracking = true;
+  document.getElementById("live-stats").hidden = false;
   requestWakeLock();
   toggleBtn.dataset.state = "active";
   btnLabel.textContent = "Arrêter la balade";
@@ -895,6 +824,8 @@ function startTracking() {
 
 function stopTracking() {
   tracking = false;
+  document.getElementById("live-stats").hidden = true;
+
   releaseWakeLock();
   if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
   if (durationTimer) { clearInterval(durationTimer); durationTimer = null; }
@@ -917,9 +848,12 @@ function stopTracking() {
     const walks = loadHistory();
     walks.push(walk);
     saveHistory(walks);
-    setStatus(`Bravo ! ${formatDistance(totalDistance)} km parcourus.`, "active");
+    setStatus(`Bravo ! 
+    updateGlobalStats();
+    ${formatDistance(totalDistance)} km parcourus.`, "active");
     renderHistory();
     updateProgress();
+    updateGlobalStats();
   } else {
     setStatus("Balade trop courte pour être sauvegardée.", "");
   }
@@ -935,9 +869,11 @@ toggleBtn.addEventListener("click", () => {
 // --- Initialisation : balades passées + rues de Paris ---
 // 1) On récupère d'abord une éventuelle balade interrompue (crash, fermeture
 //    brutale) pour ne perdre aucun point GPS.
+window.scrollTo(0, 0);
 recoverInterruptedWalk();
 renderHistory();
 updateProgress();
+updateGlobalStats();
 
 // Filet de sécurité : si l'utilisateur ferme l'onglet en plein suivi,
 // on force une dernière sauvegarde immédiate.
